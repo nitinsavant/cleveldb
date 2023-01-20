@@ -31,20 +31,20 @@ type ClevelDB struct {
 	header   *node
 	topLevel int
 	size     int
+	log      bool
 }
 
-func GetClevelDB(loadFromFile bool) (*ClevelDB, error) {
-	if loadFromFile {
-		return loadMemtable(), nil
-	}
+func GetClevelDB() (*ClevelDB, error) {
+	loadMemtable()
 
-	return newClevelDB(), nil
+	return newClevelDB(true), nil
 }
 
-func newClevelDB() *ClevelDB {
+func newClevelDB(log bool) *ClevelDB {
 	newDB := &ClevelDB{}
 	newDB.header = &node{}
 	newDB.topLevel = 1
+	newDB.log = log
 	return newDB
 }
 
@@ -81,14 +81,13 @@ func (db *ClevelDB) Get(key []byte) ([]byte, error) {
 }
 
 func (db *ClevelDB) Put(key, val []byte) error {
-	err := logInsert(key, val)
-	if err != nil {
-		return err
+	if db.log {
+		err := logInsert(key, val)
+		if err != nil {
+			return err
+		}
 	}
-	return db.put(key, val)
-}
 
-func (db *ClevelDB) put(key, val []byte) error {
 	// Track nodes who have a forward pointer that will need to be updated if a new node is inserted
 	update := make([]*node, maxLevel)
 	current := db.header
@@ -148,14 +147,13 @@ func randomLevel() int {
 }
 
 func (db *ClevelDB) Delete(key []byte) error {
-	err := logDelete(key)
-	if err != nil {
-		return err
+	if db.log {
+		err := logDelete(key)
+		if err != nil {
+			return err
+		}
 	}
-	return db.delete(key)
-}
 
-func (db *ClevelDB) delete(key []byte) error {
 	update := make([]*node, maxLevel)
 	current := db.header
 	searchKey := string(key)

@@ -2,44 +2,17 @@ package main
 
 import (
 	"errors"
-	"log"
 	"math/rand"
+	"strconv"
 	"testing"
 	"time"
 )
 
-var db DB
-var keys [][]byte
-
 func init() {
-	db = getEmptyDB()
-}
-
-func benchmarkInit(b *testing.B) {
 	rand.Seed(time.Now().Unix())
-	benchmarkSeedSize := 5_000_000
-
-	for i := 0; i < benchmarkSeedSize; i++ {
-		key := randStr(20)
-		keys = append(keys, key)
-		_ = db.Put(key, randStr(300))
-	}
-
-	b.ResetTimer()
 }
 
-func getEmptyDB() DB {
-	db, err := GetClevelDB(false)
-	if err != nil {
-		log.Fatalf("Error loading database: %v", err)
-		return nil
-	}
-	return db
-}
-
-func Test_PutGetReturnCorrectValue(t *testing.T) {
-	db = getEmptyDB()
-
+func testGetReturnsCorrectValue(t *testing.T, db DB) {
 	_ = db.Put([]byte("firstName"), []byte("nitin"))
 	_ = db.Put([]byte("lastName"), []byte("savant"))
 
@@ -67,9 +40,7 @@ func Test_PutGetReturnCorrectValue(t *testing.T) {
 	}
 }
 
-func Test_DeleteRemovesValue(t *testing.T) {
-	db := getEmptyDB()
-
+func testDeleteRemovesValue(t *testing.T, db DB) {
 	key := []byte("name")
 	val := []byte("nitin")
 
@@ -86,9 +57,7 @@ func Test_DeleteRemovesValue(t *testing.T) {
 	}
 }
 
-func Test_RangeScanAndNextReturnCorrectOrderedValues(t *testing.T) {
-	db := getEmptyDB()
-
+func testRangeScanAndNextReturnCorrectOrderedValues(t *testing.T, db DB) {
 	keys := [][]byte{[]byte("b"), []byte("c"), []byte("a"), []byte("f"), []byte("d")}
 	vals := [][]byte{[]byte("nitin"), []byte("neha"), []byte("cassie"), []byte("karli"), []byte("david")}
 
@@ -126,42 +95,46 @@ func randStr(length int) []byte {
 	return byteSlice
 }
 
-//func Benchmark_Put(b *testing.B) {
-//	benchmarkInit(b)
-//
-//	for i := 0; i < b.N; i++ {
-//		_ = db.Put(randStr(20), randStr(300))
-//	}
-//
-//	fmt.Printf("Ran %d times\n", b.N)
-//}
-//
-//func Benchmark_Get(b *testing.B) {
-//	benchmarkInit(b)
-//
-//	for i := 0; i < b.N; i++ {
-//		_, _ = db.Get(keys[i])
-//	}
-//
-//	fmt.Printf("Ran %d times\n", b.N)
-//}
-//
-//func Benchmark_Delete(b *testing.B) {
-//	benchmarkInit(b)
-//
-//	for i := 0; i < b.N; i++ {
-//		_ = db.Delete(keys[i])
-//	}
-//
-//	fmt.Printf("Ran %d times\n", b.N)
-//}
-//
-//func Benchmark_RangeScan(b *testing.B) {
-//	benchmarkInit(b)
-//
-//	for i := 0; i < b.N; i++ {
-//		_, _ = db.RangeScan([]byte("l"), []byte("p"))
-//	}
-//
-//	fmt.Printf("Ran %d times\n", b.N)
-//}
+func benchmarkFillSeq(b *testing.B, db DB) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		db.Put([]byte(strconv.Itoa(i)), []byte("v"))
+	}
+}
+
+func benchmarkFillRand(b *testing.B, db DB) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		db.Put([]byte(strconv.Itoa(rand.Int())), []byte("v"))
+	}
+}
+
+func benchmarkDeleteSeq(b *testing.B, db DB) {
+	for i := 0; i < b.N; i++ {
+		db.Put([]byte(strconv.Itoa(i)), []byte("v"))
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		db.Delete([]byte(strconv.Itoa(i)))
+	}
+}
+
+func benchmarkReadSeq(b *testing.B, db DB) {
+	for i := 0; i < b.N; i++ {
+		db.Put([]byte(strconv.Itoa(i)), []byte("v"))
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		db.Get([]byte(strconv.Itoa(i)))
+	}
+}
+
+func benchmarkRangeScan(b *testing.B, db DB) {
+	for i := 0; i < b.N; i++ {
+		db.Put([]byte(strconv.Itoa(i)), []byte("v"))
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = db.RangeScan([]byte("l"), []byte("p"))
+	}
+}

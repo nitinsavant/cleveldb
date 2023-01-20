@@ -45,7 +45,7 @@ func logDelete(key []byte) error {
 }
 
 func loadMemtable() *ClevelDB {
-	db := newClevelDB()
+	db := newClevelDB(false)
 
 	opBytes := make([]byte, 2)
 	keyLen := make([]byte, 2)
@@ -90,18 +90,19 @@ func loadMemtable() *ClevelDB {
 		}
 
 		if op == Insert {
-			err := db.put(key, val)
+			err := db.Put(key, val)
 			if err != nil {
 				fmt.Printf("Error inserting key: %v\n", err)
 				return nil
 			}
 		} else if op == Delete {
-			err := db.delete(key)
+			err := db.Delete(key)
 			if err != nil {
 				fmt.Printf("Error deleting key: %v\n", err)
 				return nil
 			}
 		}
 	}
+	db.log = true
 	return db
 }

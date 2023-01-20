@@ -9,9 +9,9 @@ type NaiveDB struct {
 	storage map[string]string
 }
 
-func NewNaiveDB() (*NaiveDB, error) {
+func newNaiveDB() *NaiveDB {
 	storage := make(map[string]string)
-	return &NaiveDB{storage: storage}, nil
+	return &NaiveDB{storage: storage}
 }
 
 func (db *NaiveDB) Get(key []byte) ([]byte, error) {
