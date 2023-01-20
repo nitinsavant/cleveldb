@@ -1,6 +1,6 @@
 # ClevelDB
 
-A clone of LevelDB written in Go.
+An attempted clone of LevelDB written in Go.
 
 ## Benchmarks
 
