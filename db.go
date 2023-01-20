@@ -1,4 +1,4 @@
-package cleveldb
+package main
 
 type DB interface {
 	Get(key []byte) ([]byte, error)

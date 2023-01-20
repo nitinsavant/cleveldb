@@ -1,4 +1,4 @@
-package cleveldb
+package main
 
 import (
 	"encoding/binary"
@@ -90,13 +90,13 @@ func loadMemtable() *ClevelDB {
 		}
 
 		if op == Insert {
-			err := db.Put(key, val)
+			err := db.put(key, val)
 			if err != nil {
 				fmt.Printf("Error inserting key: %v\n", err)
 				return nil
 			}
 		} else if op == Delete {
-			err := db.Delete(key)
+			err := db.delete(key)
 			if err != nil {
 				fmt.Printf("Error deleting key: %v\n", err)
 				return nil

@@ -1,4 +1,4 @@
-package cleveldb
+package main
 
 import (
 	"errors"
@@ -29,7 +29,7 @@ func benchmarkInit(b *testing.B) {
 }
 
 func getEmptyDB() DB {
-	db, err := GetClevelDB()
+	db, err := GetClevelDB(false)
 	if err != nil {
 		log.Fatalf("Error loading database: %v", err)
 		return nil

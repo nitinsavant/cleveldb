@@ -1,4 +1,4 @@
-package cleveldb
+package main
 
 import (
 	"bytes"
@@ -33,10 +33,9 @@ type ClevelDB struct {
 	size     int
 }
 
-func GetClevelDB() (*ClevelDB, error) {
-	existingDB := loadMemtable()
-	if existingDB.Size() > 0 {
-		return existingDB, nil
+func GetClevelDB(loadFromFile bool) (*ClevelDB, error) {
+	if loadFromFile {
+		return loadMemtable(), nil
 	}
 
 	return newClevelDB(), nil
@@ -49,7 +48,7 @@ func newClevelDB() *ClevelDB {
 	return newDB
 }
 
-func (db *ClevelDB) getNode(key []byte) (*node, error) {
+func (db *ClevelDB) get(key []byte) (*node, error) {
 	// Start with pointers from the list's header node
 	current := db.header
 	searchKey := string(key)
@@ -73,7 +72,7 @@ func (db *ClevelDB) getNode(key []byte) (*node, error) {
 }
 
 func (db *ClevelDB) Get(key []byte) ([]byte, error) {
-	node, err := db.getNode(key)
+	node, err := db.get(key)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +85,10 @@ func (db *ClevelDB) Put(key, val []byte) error {
 	if err != nil {
 		return err
 	}
+	return db.put(key, val)
+}
 
+func (db *ClevelDB) put(key, val []byte) error {
 	// Track nodes who have a forward pointer that will need to be updated if a new node is inserted
 	update := make([]*node, maxLevel)
 	current := db.header
@@ -150,7 +152,10 @@ func (db *ClevelDB) Delete(key []byte) error {
 	if err != nil {
 		return err
 	}
+	return db.delete(key)
+}
 
+func (db *ClevelDB) delete(key []byte) error {
 	update := make([]*node, maxLevel)
 	current := db.header
 	searchKey := string(key)
@@ -188,7 +193,7 @@ func (db *ClevelDB) Size() int {
 }
 
 func (db *ClevelDB) RangeScan(start, limit []byte) (Iterator, error) {
-	startNode, err := db.getNode(start)
+	startNode, err := db.get(start)
 	if err != nil {
 		return nil, err
 	}
