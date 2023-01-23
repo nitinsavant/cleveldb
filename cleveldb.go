@@ -8,17 +8,26 @@ import (
 )
 
 const (
-	p           float32 = 0.5
-	maxLevel    int     = 24
-	logFileName         = "memtable.log"
+	p               float32 = 0.5 // from Skip List paper; Redis/LevelDB use 0.25
+	maxLevel        int     = 24  // arbitrary / don't remember why
+	journalFilename         = "memtable.log"
 )
 
-var logFile *os.File
+type ClevelDB struct {
+	mdb         *MemDB
+	journal     bool
+	journalFile *os.File
+}
+
+// MemDB - In-Memory Database (implemented by a Skip List)
+type MemDB struct {
+	header   *node
+	topLevel int
+	size     int
+}
 
 func init() {
 	rand.Seed(time.Now().Unix())
-
-	logFile, _ = os.OpenFile(logFileName, os.O_APPEND|os.O_RDWR|os.O_CREATE, os.ModePerm)
 }
 
 type node struct {
@@ -27,34 +36,36 @@ type node struct {
 	ptrs [maxLevel]*node
 }
 
-type ClevelDB struct {
-	header   *node
-	topLevel int
-	size     int
-	log      bool
-}
-
 func GetClevelDB() (*ClevelDB, error) {
-	loadMemtable()
+	journalFile, _ := os.OpenFile(journalFilename, os.O_APPEND|os.O_RDWR|os.O_CREATE, os.ModePerm)
 
-	return newClevelDB(true), nil
+	recoverJournal(journalFile)
+
+	return newClevelDB(true, journalFile), nil
 }
 
-func newClevelDB(log bool) *ClevelDB {
+func newClevelDB(journal bool, journalFile *os.File) *ClevelDB {
 	newDB := &ClevelDB{}
-	newDB.header = &node{}
-	newDB.topLevel = 1
-	newDB.log = log
+
+	newMdb := &MemDB{}
+	newMdb.header = &node{}
+	newMdb.topLevel = 1
+
+	newDB.mdb = newMdb
+	newDB.journal = journal
+	newDB.journalFile = journalFile
 	return newDB
 }
 
 func (db *ClevelDB) get(key []byte) (*node, error) {
+	mdb := db.mdb
+
 	// Start with pointers from the list's header node
-	current := db.header
+	current := mdb.header
 	searchKey := string(key)
 
 	// Use pointers to look ahead until you find one equal to or larger and then stop
-	for level := db.topLevel; level > 0; level-- {
+	for level := mdb.topLevel; level > 0; level-- {
 		for current.ptrs[level-1] != nil && string(current.ptrs[level-1].key) < searchKey {
 			current = current.ptrs[level-1]
 		}
@@ -81,19 +92,21 @@ func (db *ClevelDB) Get(key []byte) ([]byte, error) {
 }
 
 func (db *ClevelDB) Put(key, val []byte) error {
-	if db.log {
-		err := logInsert(key, val)
+	if db.journal {
+		_, err := writeInsertToJournal(db.journalFile, key, val)
 		if err != nil {
 			return err
 		}
 	}
 
+	mdb := db.mdb
+
 	// Track nodes who have a forward pointer that will need to be updated if a new node is inserted
 	update := make([]*node, maxLevel)
-	current := db.header
+	current := mdb.header
 	searchKey := string(key)
 
-	for level := db.topLevel; level > 0; level-- {
+	for level := mdb.topLevel; level > 0; level-- {
 		for current.ptrs[level-1] != nil && string(current.ptrs[level-1].key) < searchKey {
 			current = current.ptrs[level-1]
 		}
@@ -110,17 +123,17 @@ func (db *ClevelDB) Put(key, val []byte) error {
 		return nil
 	}
 
-	// Insert new node (at random level)
+	// Delete new node (at random level)
 	newLevel := randomLevel()
 
 	// If the new level is higher than the current max level, we'll need to also
 	// update the header node at the new higher levels, so we add the header's new
 	// levels to the update vector
-	if newLevel > db.topLevel {
-		for level := db.topLevel; level < newLevel; level++ {
-			update[level] = db.header
+	if newLevel > mdb.topLevel {
+		for level := mdb.topLevel; level < newLevel; level++ {
+			update[level] = mdb.header
 		}
-		db.topLevel = newLevel
+		mdb.topLevel = newLevel
 	}
 
 	// Create new node with empty forward pointers
@@ -133,8 +146,7 @@ func (db *ClevelDB) Put(key, val []byte) error {
 		update[i].ptrs[i] = newNode
 	}
 
-	db.size++
-
+	mdb.size++
 	return nil
 }
 
@@ -147,18 +159,20 @@ func randomLevel() int {
 }
 
 func (db *ClevelDB) Delete(key []byte) error {
-	if db.log {
-		err := logDelete(key)
+	if db.journal {
+		_, err := writeDeleteToJournal(db.journalFile, key)
 		if err != nil {
 			return err
 		}
 	}
 
+	mdb := db.mdb
+
 	update := make([]*node, maxLevel)
-	current := db.header
+	current := mdb.header
 	searchKey := string(key)
 
-	for level := db.topLevel; level > 0; level-- {
+	for level := mdb.topLevel; level > 0; level-- {
 		for current.ptrs[level-1] != nil && string(current.ptrs[level-1].key) < searchKey {
 			current = current.ptrs[level-1]
 		}
@@ -169,25 +183,17 @@ func (db *ClevelDB) Delete(key []byte) error {
 
 	if searchKey != string(current.key) {
 		return nil // key not found; nothing to delete
+	} else {
+		// Set to nil (i.e. tombstone), so that when a key is deleted and Get(key) is called, we'll stop looking once
+		// we see the tombstone, and we won't keep looking and return the original value
+		current.val = nil
 	}
 
-	for i := 0; i < db.topLevel; i++ {
-		if update[i].ptrs[i] != current {
-			break
-		}
-		update[i].ptrs[i] = current.ptrs[i]
-	}
-
-	for db.topLevel > 1 && db.header.ptrs[db.topLevel] == nil {
-		db.topLevel--
-	}
-
-	db.size--
 	return nil
 }
 
 func (db *ClevelDB) Size() int {
-	return db.size
+	return db.mdb.size
 }
 
 func (db *ClevelDB) RangeScan(start, limit []byte) (Iterator, error) {
@@ -196,16 +202,16 @@ func (db *ClevelDB) RangeScan(start, limit []byte) (Iterator, error) {
 		return nil, err
 	}
 
-	return &ClevelIterator{currentNode: startNode, limitVal: limit}, nil
+	return &ClevelIterator{currentNode: startNode, limit: limit}, nil
 }
 
 type ClevelIterator struct {
 	currentNode *node
-	limitVal    []byte
+	limit       []byte
 }
 
 func (i *ClevelIterator) Next() bool {
-	if bytes.Compare(i.currentNode.val, i.limitVal) == 0 {
+	if bytes.Compare(i.currentNode.key, i.limit) == 0 {
 		return false
 	}
 	i.currentNode = i.currentNode.ptrs[0]

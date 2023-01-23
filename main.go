@@ -8,11 +8,11 @@ func main() {
 		return
 	}
 
-	fmt.Println(db.header)
+	fmt.Println(db.mdb.header)
 
 	//db.Put([]byte("firstName"), []byte("nitin"))
 	//db.Put([]byte("lastName"), []byte("savant"))
 	//db.Put([]byte("middleName"), []byte("gajendra"))
-	//db.Delete([]byte("middleName"))
+	//db.Insert([]byte("middleName"))
 
 }

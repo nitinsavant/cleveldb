@@ -8,8 +8,8 @@ func Test_NaiveDBGetReturnsCorrectValue(t *testing.T) {
 	testGetReturnsCorrectValue(t, newNaiveDB())
 }
 
-func Test_NaiveDBDeleteRemovesValue(t *testing.T) {
-	testDeleteRemovesValue(t, newNaiveDB())
+func Test_NaiveDBDeleteSetsValueToNil(t *testing.T) {
+	testDeleteSetsValueToNil(t, newNaiveDB())
 }
 
 func Test_NaiveDBRangeScanAndNextReturnCorrectOrderedValues(t *testing.T) {

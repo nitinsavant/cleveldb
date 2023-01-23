@@ -15,6 +15,7 @@ func init() {
 func testGetReturnsCorrectValue(t *testing.T, db DB) {
 	_ = db.Put([]byte("firstName"), []byte("nitin"))
 	_ = db.Put([]byte("lastName"), []byte("savant"))
+	_ = db.Put([]byte("maidenName"), []byte(""))
 
 	var tests = []struct {
 		key   string
@@ -23,6 +24,7 @@ func testGetReturnsCorrectValue(t *testing.T, db DB) {
 	}{
 		{"lastName", "savant", nil},
 		{"firstName", "nitin", nil},
+		{"maidenName", "", nil},
 		{"middleName", "", errors.New("key not found")},
 	}
 
@@ -40,7 +42,7 @@ func testGetReturnsCorrectValue(t *testing.T, db DB) {
 	}
 }
 
-func testDeleteRemovesValue(t *testing.T, db DB) {
+func testDeleteSetsValueToNil(t *testing.T, db DB) {
 	key := []byte("name")
 	val := []byte("nitin")
 
@@ -52,7 +54,7 @@ func testDeleteRemovesValue(t *testing.T, db DB) {
 
 	_ = db.Delete(key)
 	actual, _ = db.Get(key)
-	if string(actual) != "" {
+	if actual != nil {
 		t.Errorf(`storage.Get("%s") returns unexpected value: "%s"`, key, actual)
 	}
 }
@@ -71,28 +73,24 @@ func testRangeScanAndNextReturnCorrectOrderedValues(t *testing.T, db DB) {
 
 	expectedKeys := [][]byte{[]byte("b"), []byte("c"), []byte("d")}
 	expectedVals := [][]byte{[]byte("nitin"), []byte("neha"), []byte("david")}
+	expectedNexts := []bool{true, true, false}
 
 	for i := 0; i < len(expectedKeys); i++ {
 		expectedVal := string(expectedVals[i])
 		expectedKey := string(expectedKeys[i])
+		expectedNext := expectedNexts[i]
 		actualVal := string(iter.Value())
 		actualKey := string(iter.Key())
+		actualNext := iter.Next()
 
 		if expectedKey != actualKey || expectedVal != actualVal {
 			t.Errorf(`storage.RangeScan returns unexpected key/value: "%s: %s" at index: %v`, actualKey, actualVal, i)
 		}
-		iter.Next()
-	}
-}
 
-func randStr(length int) []byte {
-	const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-	byteSlice := make([]byte, length)
-	for i := range byteSlice {
-		byteSlice[i] = letterBytes[rand.Intn(len(letterBytes))]
+		if expectedNext != actualNext {
+			t.Errorf(`storage.RangeScan returns unexpected next value-- Expected: "%v, Actual: %v" at index: %v`, expectedNext, actualNext, i)
+		}
 	}
-	return byteSlice
 }
 
 func benchmarkFillSeq(b *testing.B, db DB) {
