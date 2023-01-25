@@ -41,7 +41,7 @@ func GetClevelDB() (*ClevelDB, error) {
 
 	recoverJournal(journalFile)
 
-	return newClevelDB(true, journalFile), nil
+	return newClevelDB(false, journalFile), nil
 }
 
 func newClevelDB(journal bool, journalFile *os.File) *ClevelDB {

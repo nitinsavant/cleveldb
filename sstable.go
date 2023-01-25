@@ -11,10 +11,12 @@ import (
 
 const ssTableFilename = "table.ss"
 const indexBlockLength = 10
+const indexOffsetSizeInBytes = 4
 
 type SSTableDB struct {
-	file  *os.File
-	index []indexPair
+	file        *os.File
+	index       []indexPair
+	indexOffset uint32
 }
 
 type indexPair struct {
@@ -22,33 +24,19 @@ type indexPair struct {
 	offset uint32
 }
 
-func newSSTableDB() *SSTableDB {
-	ssTableFile, err := os.OpenFile(ssTableFilename, os.O_APPEND|os.O_RDWR|os.O_CREATE, os.ModePerm)
-	if err != nil {
-		return nil
-	}
-
-	index, err := loadIndexFromSSTable(ssTableFile)
-	if err != nil {
-		return nil
-	}
-
-	return &SSTableDB{file: ssTableFile, index: index}
-}
-
-func loadIndexFromSSTable(file *os.File) ([]indexPair, error) {
-	// Read index offset from beginning of file
+func loadIndexFromSSTable(file *os.File) (uint32, []indexPair, error) {
+	// Read index offset from beginning of the file
 	indexOffsetBytes := make([]byte, 4)
-	_, err := file.Read(indexOffsetBytes)
+	_, err := file.ReadAt(indexOffsetBytes, 0)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	indexOffset := binary.BigEndian.Uint32(indexOffsetBytes)
 
 	// Seek to the beginning of the index
 	_, err = file.Seek(int64(indexOffset), 0)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 
 	keyLengthBytes := make([]byte, 2)
@@ -61,7 +49,7 @@ func loadIndexFromSSTable(file *os.File) ([]indexPair, error) {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return nil, err
+			return 0, nil, err
 		}
 
 		keyLength := binary.BigEndian.Uint16(keyLengthBytes)
@@ -70,12 +58,12 @@ func loadIndexFromSSTable(file *os.File) ([]indexPair, error) {
 
 		_, err = file.Read(key)
 		if err != nil {
-			return nil, err
+			return 0, nil, err
 		}
 
 		_, err = file.Read(offsetBytes)
 		if err != nil {
-			return nil, err
+			return 0, nil, err
 		}
 
 		offset := binary.BigEndian.Uint32(offsetBytes)
@@ -83,7 +71,7 @@ func loadIndexFromSSTable(file *os.File) ([]indexPair, error) {
 		indexPairs = append(indexPairs, indexPair{key: key, offset: offset})
 	}
 
-	return indexPairs, nil
+	return indexOffset, indexPairs, nil
 }
 
 func (db *SSTableDB) Get(key []byte) ([]byte, error) {
@@ -95,9 +83,16 @@ func (db *SSTableDB) Get(key []byte) ([]byte, error) {
 	return val, err
 }
 
-func (db *SSTableDB) get(key []byte) ([]byte, int64, error) {
+func (db *SSTableDB) Put(key, value []byte) error {
+	return errors.New("read-only")
+}
+
+func (db *SSTableDB) Delete(key []byte) error {
+	return errors.New("read-only")
+}
+
+func (db *SSTableDB) get(searchKey []byte) ([]byte, int64, error) {
 	file := db.file
-	searchKey := key
 
 	var targetIdx int
 
@@ -117,8 +112,10 @@ func (db *SSTableDB) get(key []byte) ([]byte, int64, error) {
 		return nil, 0, err
 	}
 
+	var offset int64
+
 	// Sequentially read each key-value pair within the selected index block
-	for i := 0; i < indexBlockLength; i++ {
+	for i := 0; i < indexBlockLength && uint32(offset) < db.indexOffset; i++ {
 		op := make([]byte, 1)
 		_, err := file.Read(op)
 		if err == io.EOF {
@@ -156,7 +153,7 @@ func (db *SSTableDB) get(key []byte) ([]byte, int64, error) {
 			return nil, 0, err
 		}
 
-		offset, err := file.Seek(0, io.SeekCurrent)
+		offset, err = file.Seek(0, io.SeekCurrent)
 		if err != nil {
 			fmt.Printf("Error retrieving current offset: %v\n", err)
 			return nil, 0, err
@@ -276,28 +273,25 @@ func (i *SSIterator) Value() []byte {
 	return i.currentVal
 }
 
-func (db *SSTableDB) Put(key, value []byte) error {
-	return errors.New("read-only")
-}
+func (db *ClevelDB) flushSSTable(filename string) (*os.File, error) {
+	ssTableFile, _ := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, os.ModePerm)
 
-func (db *SSTableDB) Delete(key []byte) error {
-	return errors.New("read-only")
-}
-
-func (db *ClevelDB) flushSSTable() error {
-	ssTableFile, _ := os.OpenFile(ssTableFilename, os.O_APPEND|os.O_RDWR|os.O_CREATE, os.ModePerm)
+	err := ssTableFile.Truncate(0)
+	if err != nil {
+		return nil, err
+	}
 
 	current := db.mdb.header.ptrs[0]
 	var op uint8
 
 	var keyIdx uint16
-	var indexOffset uint32
+	var indexOffset int64
 	var indexBlocks []indexPair
 
 	// Reserve space for the index offset
-	_, err := ssTableFile.Seek(4, 0)
+	_, err = ssTableFile.Seek(indexOffsetSizeInBytes, 0)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Write key-value pairs to file
@@ -308,26 +302,38 @@ func (db *ClevelDB) flushSSTable() error {
 			op = Insert
 		}
 
-		n, err := writeOpToFile(ssTableFile, op, current.key, current.val, false)
+		// TODO: Remove first return value. Not needed if Seek works below.
+		_, err := writeOpToFile(ssTableFile, op, current.key, current.val, false)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		indexOffset += uint32(n)
+
+		indexOffset, err = ssTableFile.Seek(0, io.SeekCurrent)
+		if err != nil {
+			fmt.Printf("Error retrieving current offset: %v\n", err)
+			return nil, err
+		}
 
 		current = current.ptrs[0]
 
 		if keyIdx%indexBlockLength == 0 {
-			indexBlocks = append(indexBlocks, indexPair{key: current.key, offset: indexOffset})
+			indexBlocks = append(indexBlocks, indexPair{key: current.key, offset: uint32(indexOffset)})
 		}
 		keyIdx++
 	}
 
 	// Write index offset to the start of the file
 	var indexOffsetBytes []byte
-	indexOffsetBytes = binary.BigEndian.AppendUint32(indexOffsetBytes, indexOffset)
+	indexOffsetBytes = binary.BigEndian.AppendUint32(indexOffsetBytes, uint32(indexOffset))
 	_, err = ssTableFile.WriteAt(indexOffsetBytes, 0)
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	// Seek back to end-of-file
+	_, err = ssTableFile.Seek(indexOffset, 0)
+	if err != nil {
+		return nil, err
 	}
 
 	// Write index offset pairs to the end of the file
@@ -340,14 +346,9 @@ func (db *ClevelDB) flushSSTable() error {
 
 		_, err := ssTableFile.Write(toAppend)
 		if err != nil {
-			return errors.New("error writing index to file")
+			return nil, errors.New("error writing index to file")
 		}
 	}
 
-	err = ssTableFile.Close()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return ssTableFile, nil
 }
