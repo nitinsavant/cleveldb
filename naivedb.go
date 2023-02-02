@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"sort"
 )
 
@@ -17,7 +16,7 @@ func newNaiveDB() *NaiveDB {
 func (db *NaiveDB) Get(key []byte) ([]byte, error) {
 	val, ok := db.storage[string(key)]
 	if !ok {
-		return nil, errors.New("key not found")
+		return nil, keyNotFoundErr
 	}
 	return val, nil
 }

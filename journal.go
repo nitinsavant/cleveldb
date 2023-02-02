@@ -13,8 +13,15 @@ const (
 	Insert
 )
 
-func writeOpToFile(file *os.File, op uint8, key, val []byte, sync bool) (int, error) {
+func writeOpToFile(file *os.File, key, val []byte, sync bool) (int, error) {
 	var toAppend []byte
+	var op uint8
+
+	if val != nil {
+		op = Insert
+	} else {
+		op = Delete
+	}
 
 	toAppend = append(toAppend, op)
 
@@ -39,14 +46,6 @@ func writeOpToFile(file *os.File, op uint8, key, val []byte, sync bool) (int, er
 	}
 
 	return n, nil
-}
-
-func writeInsertToJournal(file *os.File, key, val []byte) (int, error) {
-	return writeOpToFile(file, Insert, key, val, true)
-}
-
-func writeDeleteToJournal(file *os.File, key []byte) (int, error) {
-	return writeOpToFile(file, Delete, key, nil, true)
 }
 
 func recoverJournal(journalFile *os.File) *ClevelDB {
@@ -107,4 +106,8 @@ func recoverJournal(journalFile *os.File) *ClevelDB {
 	}
 	db.journal = true
 	return db
+}
+
+func (db *ClevelDB) truncateJournal() error {
+	return db.journalFile.Truncate(0)
 }

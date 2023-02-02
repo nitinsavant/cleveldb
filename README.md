@@ -39,3 +39,12 @@ Benchmark_NaiveDBReadSeq-8      	 5130001	       262.3 ns/op
 
 Benchmark_NaiveDBRangeScan
 Benchmark_NaiveDBRangeScan-8    	   10000	   2417228 ns/op
+
+
+### TODO
+- Use a larger variable-length integer for key/value sizes. The key/value sizes are currently uint16, so their max size is limited to 65,536.
+
+
+### KNOWN ISSUES
+- If keys are updated while the memtable is being flushed, those update operations will be missing from the journal (i.e. write-ahead-log) because the entire journal is truncated after flushing. 
+- Searching for a key that is in a memtable that's being actively flushed will not be found. 

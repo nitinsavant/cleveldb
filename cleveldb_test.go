@@ -1,11 +1,79 @@
 package main
 
 import (
+	"fmt"
+	"os"
 	"testing"
 )
 
 func Test_ClevelDBGetReturnsCorrectValue(t *testing.T) {
 	testGetReturnsCorrectValue(t, newClevelDB(false, nil))
+}
+
+func Test_ClevelDBGetReturnsCorrectValueFromSSTable(t *testing.T) {
+	db := newClevelDB(false, nil)
+
+	_ = db.Put([]byte("firstName"), []byte("neha"))
+	_ = db.Put([]byte("lastName"), []byte("munoz"))
+	_ = db.Put([]byte("maidenName"), []byte("savant"))
+	_ = db.Put([]byte("middleName"), []byte("gajendra"))
+
+	file, err := os.OpenFile("test/segment_1.ss", os.O_RDWR|os.O_CREATE, os.ModePerm)
+	if err != nil {
+		fmt.Printf("error opening file: %v", err)
+		return
+	}
+
+	ssTable, err := flushMemtable(file, db.mdb)
+	if err != nil {
+		fmt.Printf("error flushing memtable: %v", err)
+	}
+
+	db.segments = append(db.segments, ssTable)
+
+	db.mdb = newMemtable()
+
+	_ = db.Put([]byte("firstName"), []byte("nitin"))
+	_ = db.Put([]byte("lastName"), []byte("savant"))
+	_ = db.Put([]byte("maidenName"), []byte(""))
+	_ = db.Delete([]byte("middleName"))
+
+	file, err = os.OpenFile("test/segment_2.ss", os.O_RDWR|os.O_CREATE, os.ModePerm)
+	if err != nil {
+		fmt.Printf("error opening file: %v", err)
+		return
+	}
+
+	ssTable, err = flushMemtable(file, db.mdb)
+	if err != nil {
+		fmt.Printf("error flushing memtable: %v", err)
+	}
+
+	db.segments = append(db.segments, ssTable)
+
+	var tests = []struct {
+		key   string
+		value string
+		err   error
+	}{
+		{"lastName", "savant", nil},
+		{"firstName", "nitin", nil},
+		{"maidenName", "", nil},
+		{"middleName", "", keyNotFoundErr},
+	}
+
+	for _, test := range tests {
+		actualValue, actualErr := db.Get([]byte(test.key))
+		expectedValue := []byte(test.value)
+
+		if string(actualValue) != string(expectedValue) {
+			t.Errorf(`storage.Get("%s") returns unexpected value: "%s"`, test.key, actualValue)
+		}
+
+		if test.err != actualErr {
+			t.Errorf(`storage.Get("%s") returns unexpected err: "%s"`, test.key, actualErr)
+		}
+	}
 }
 
 func Test_ClevelDBDeleteRemovesValue(t *testing.T) {

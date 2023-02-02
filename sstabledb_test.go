@@ -1,11 +1,12 @@
 package main
 
 import (
-	"errors"
+	"fmt"
+	"os"
 	"testing"
 )
 
-var ssTableDB *SSTableDB
+var ssTableDB *SSTable
 
 func getTestSSTableDB() DB {
 	if ssTableDB != nil {
@@ -31,19 +32,23 @@ func getTestSSTableDB() DB {
 	_ = db.Put(keys[3], vals[3])
 	_ = db.Put(keys[4], vals[4])
 
-	testFilename := "test/" + ssTableFilename
+	file, err := os.OpenFile("test/segment_1.ss", os.O_RDWR|os.O_CREATE, os.ModePerm)
+	if err != nil {
+		fmt.Printf("error opening file: %v", err)
+		return nil
+	}
 
-	ssTableFile, err := db.flushSSTable(testFilename)
+	ssTable, err := flushMemtable(file, db.mdb)
 	if err != nil {
 		return nil
 	}
 
-	offset, index, err := loadIndexFromSSTable(ssTableFile)
+	offset, index, err := loadIndexFromSSTable(ssTable.file)
 	if err != nil {
 		return nil
 	}
 
-	return &SSTableDB{file: ssTableFile, index: index, indexOffset: offset}
+	return &SSTable{file: ssTable.file, index: index, indexOffset: offset}
 }
 
 func Test_SSTableDBGetReturnsCorrectValue(t *testing.T) {
@@ -57,7 +62,7 @@ func Test_SSTableDBGetReturnsCorrectValue(t *testing.T) {
 		{"lastName", "savant", nil},
 		{"firstName", "nitin", nil},
 		{"maidenName", "", nil},
-		{"middleName", "", errors.New("key not found")},
+		{"middleName", "", keyNotFoundErr},
 	}
 
 	for _, test := range tests {
@@ -68,7 +73,7 @@ func Test_SSTableDBGetReturnsCorrectValue(t *testing.T) {
 			t.Errorf(`storage.Get("%s") returns unexpected value: "%s"`, test.key, actualValue)
 		}
 
-		if test.err != nil && actualErr != nil && test.err.Error() != actualErr.Error() {
+		if test.err != actualErr {
 			t.Errorf(`storage.Get("%s") returns unexpected err: "%s"`, test.key, actualErr)
 		}
 	}

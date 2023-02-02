@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"math/rand"
 	"strconv"
 	"testing"
@@ -25,7 +24,7 @@ func testGetReturnsCorrectValue(t *testing.T, db DB) {
 		{"lastName", "savant", nil},
 		{"firstName", "nitin", nil},
 		{"maidenName", "", nil},
-		{"middleName", "", errors.New("key not found")},
+		{"middleName", "", keyNotFoundErr},
 	}
 
 	for _, test := range tests {
@@ -36,7 +35,7 @@ func testGetReturnsCorrectValue(t *testing.T, db DB) {
 			t.Errorf(`storage.Get("%s") returns unexpected value: "%s"`, test.key, actualValue)
 		}
 
-		if test.err != nil && actualErr != nil && test.err.Error() != actualErr.Error() {
+		if test.err != actualErr {
 			t.Errorf(`storage.Get("%s") returns unexpected err: "%s"`, test.key, actualErr)
 		}
 	}
