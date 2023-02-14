@@ -24,7 +24,7 @@ func testGetReturnsCorrectValue(t *testing.T, db DB) {
 		{"lastName", "savant", nil},
 		{"firstName", "nitin", nil},
 		{"maidenName", "", nil},
-		{"middleName", "", keyNotFoundErr},
+		{"middleName", "", notFoundInDBErr},
 	}
 
 	for _, test := range tests {
@@ -75,11 +75,12 @@ func testRangeScanAndNextReturnCorrectOrderedValues(t *testing.T, db DB) {
 	expectedNexts := []bool{true, true, false}
 
 	for i := 0; i < len(expectedKeys); i++ {
-		expectedVal := string(expectedVals[i])
 		expectedKey := string(expectedKeys[i])
+		expectedVal := string(expectedVals[i])
 		expectedNext := expectedNexts[i]
-		actualVal := string(iter.Value())
+
 		actualKey := string(iter.Key())
+		actualVal := string(iter.Value())
 		actualNext := iter.Next()
 
 		if expectedKey != actualKey || expectedVal != actualVal {

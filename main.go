@@ -3,12 +3,12 @@ package main
 import "fmt"
 
 func main() {
-	db, err := GetClevelDB()
+	db, err := loadClevelDB()
 	if err != nil {
 		return
 	}
 
-	fmt.Println(db.mdb.header)
+	fmt.Println(db.memtable.header)
 
 	//db.Put([]byte("firstName"), []byte("nitin"))
 	//db.Put([]byte("lastName"), []byte("savant"))

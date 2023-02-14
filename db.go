@@ -7,12 +7,6 @@ type DB interface {
 	RangeScan(start, limit []byte) (Iterator, error)
 }
 
-//type ImmutableDB interface {
-//	Get(key []byte) (value []byte, err error)
-//	Has(key []byte) (ret bool, err error)
-//	RangeScan(start, limit []byte) (Iterator, error)
-//}
-
 type Iterator interface {
 	Next() bool
 	Error() error

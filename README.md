@@ -2,6 +2,25 @@
 
 An attempted clone of LevelDB written in Go.
 
+ClevelDB is my attempt to build a clone of LevelDB in order to explore many of its key ideas, including:
+
+- A skip list (i.e. memtable) to support fast retrieval of the most recent db writes
+- A write-ahead-log (i.e. journal) to add basic persistence and support recovery in the event of a crash
+- SSTables to write (i.e. flush) older data to disk that won't fit in memory
+- On-disk indexes to improve performance when searching SSTables
+- Bloom Filter to improve performance when searching SSTables
+
+## TODO
+- Use a larger variable-length integer for key/value sizes. The key/value sizes are currently uint16, so their max size is limited to 65,536.
+- Integrate the bloom filter into ClevelDB. I may need to modify the multi-table RangeScan implementation (because it currently returns the nearest key and that doesn't appear to work with a basic BloomFilter guard clause)
+- Add comprehensive tests to verify merged ClevelDBIterator behaves as expected
+- Add background compaction to remove duplicate/deleted keys and potentially reduce the number of SSTables and their sizes
+- Fix and run benchmarks for current ClevelDB implementation (SkipList + SSTables)
+
+## KNOWN ISSUES
+- If keys are updated while the memtable is being flushed, those update operations will be missing from the journal (i.e. write-ahead-log) because the journal is truncated after flushing.
+- Searching for a key that is in a memtable that's being actively flushed will not be found.
+
 ## Benchmarks
 
 For the following two implementations:
@@ -39,12 +58,3 @@ Benchmark_NaiveDBReadSeq-8      	 5130001	       262.3 ns/op
 
 Benchmark_NaiveDBRangeScan
 Benchmark_NaiveDBRangeScan-8    	   10000	   2417228 ns/op
-
-
-### TODO
-- Use a larger variable-length integer for key/value sizes. The key/value sizes are currently uint16, so their max size is limited to 65,536.
-
-
-### KNOWN ISSUES
-- If keys are updated while the memtable is being flushed, those update operations will be missing from the journal (i.e. write-ahead-log) because the entire journal is truncated after flushing. 
-- Searching for a key that is in a memtable that's being actively flushed will not be found. 

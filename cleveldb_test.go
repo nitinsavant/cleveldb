@@ -24,14 +24,14 @@ func Test_ClevelDBGetReturnsCorrectValueFromSSTable(t *testing.T) {
 		return
 	}
 
-	ssTable, err := flushMemtable(file, db.mdb)
+	ssTable, err := flushMemtable(db, file)
 	if err != nil {
 		fmt.Printf("error flushing memtable: %v", err)
 	}
 
-	db.segments = append(db.segments, ssTable)
+	db.tables = append(db.tables, ssTable)
 
-	db.mdb = newMemtable()
+	db.memtable = newMemtable()
 
 	_ = db.Put([]byte("firstName"), []byte("nitin"))
 	_ = db.Put([]byte("lastName"), []byte("savant"))
@@ -44,12 +44,12 @@ func Test_ClevelDBGetReturnsCorrectValueFromSSTable(t *testing.T) {
 		return
 	}
 
-	ssTable, err = flushMemtable(file, db.mdb)
+	ssTable, err = flushMemtable(db, file)
 	if err != nil {
 		fmt.Printf("error flushing memtable: %v", err)
 	}
 
-	db.segments = append(db.segments, ssTable)
+	db.tables = append(db.tables, ssTable)
 
 	var tests = []struct {
 		key   string
@@ -59,7 +59,7 @@ func Test_ClevelDBGetReturnsCorrectValueFromSSTable(t *testing.T) {
 		{"lastName", "savant", nil},
 		{"firstName", "nitin", nil},
 		{"maidenName", "", nil},
-		{"middleName", "", keyNotFoundErr},
+		{"middleName", "", notFoundInDBErr},
 	}
 
 	for _, test := range tests {
@@ -104,18 +104,18 @@ func Benchmark_ClevelDBRangeScan(b *testing.B) {
 	benchmarkRangeScan(b, newClevelDB(false, nil))
 }
 
-//func Benchmark_ClevelDBFLogFillSeq(b *testing.B) {
-//	benchmarkFillSeq(b, newClevelDB(true))
-//}
-//
-//func Benchmark_ClevelDBLogFillRand(b *testing.B) {
-//	benchmarkFillRand(b, newClevelDB(true))
-//}
-//
-//func Benchmark_ClevelDBLogDeleteSeq(b *testing.B) {
-//	benchmarkDeleteSeq(b, newClevelDB(true))
-//}
-//
-//func Benchmark_ClevelDBLogReadSeq(b *testing.B) {
-//	benchmarkReadSeq(b, newClevelDB(true))
-//}
+func Benchmark_ClevelDBFLogFillSeq(b *testing.B) {
+	benchmarkFillSeq(b, newClevelDB(true, nil))
+}
+
+func Benchmark_ClevelDBLogFillRand(b *testing.B) {
+	benchmarkFillRand(b, newClevelDB(true, nil))
+}
+
+func Benchmark_ClevelDBLogDeleteSeq(b *testing.B) {
+	benchmarkDeleteSeq(b, newClevelDB(true, nil))
+}
+
+func Benchmark_ClevelDBLogReadSeq(b *testing.B) {
+	benchmarkReadSeq(b, newClevelDB(true, nil))
+}

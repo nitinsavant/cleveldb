@@ -13,7 +13,7 @@ const (
 	Insert
 )
 
-func writeOpToFile(file *os.File, key, val []byte, sync bool) (int, error) {
+func writeKeyValPairToFile(file *os.File, key, val []byte, sync bool) (int, error) {
 	var toAppend []byte
 	var op uint8
 
@@ -48,7 +48,7 @@ func writeOpToFile(file *os.File, key, val []byte, sync bool) (int, error) {
 	return n, nil
 }
 
-func recoverJournal(journalFile *os.File) *ClevelDB {
+func recoverMemtable(journalFile *os.File) *ClevelDB {
 	db := newClevelDB(false, journalFile)
 
 	op := make([]byte, 1)
@@ -103,11 +103,17 @@ func recoverJournal(journalFile *os.File) *ClevelDB {
 				return nil
 			}
 		}
+
+		db.memtable.size++
 	}
 	db.journal = true
 	return db
 }
 
-func (db *ClevelDB) truncateJournal() error {
-	return db.journalFile.Truncate(0)
+func (db *ClevelDB) clearJournal() error {
+	if db.journal {
+		return db.journalFile.Truncate(0)
+	} else {
+		return nil
+	}
 }

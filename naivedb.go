@@ -16,7 +16,7 @@ func newNaiveDB() *NaiveDB {
 func (db *NaiveDB) Get(key []byte) ([]byte, error) {
 	val, ok := db.storage[string(key)]
 	if !ok {
-		return nil, keyNotFoundErr
+		return nil, notFoundInDBErr
 	}
 	return val, nil
 }
