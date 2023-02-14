@@ -1,7 +1,5 @@
 # ClevelDB
 
-An attempted clone of LevelDB written in Go.
-
 ClevelDB is my attempt to build a clone of LevelDB in order to explore many of its key ideas, including:
 
 - A skip list (i.e. memtable) to support fast retrieval of the most recent db writes
